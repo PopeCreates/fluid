@@ -11,7 +11,7 @@ npm install
 ## Usage
 
 ```typescript
-import { FluidClient } from "./src";
+import { FluidClient } from "fluid-client";
 import StellarSdk from "@stellar/stellar-sdk";
 
 const client = new FluidClient({
@@ -30,7 +30,7 @@ const transaction = new StellarSdk.TransactionBuilder(account, {
 
 transaction.sign(keypair);
 
-const result = await client.requestFeeBump(transaction.toXDR(), false);
+const result = await client.requestFeeBump(transaction, false);
 const submitResult = await client.submitFeeBumpTransaction(result.xdr);
 ```
 
@@ -94,10 +94,21 @@ new FluidClient(config: {
 
 #### Methods
 
-- `requestFeeBump(signedXdr: string, submit?: boolean)` - Request fee-bump for a signed transaction
+- `requestFeeBump(transactionOrXdr: string | { toXDR(): string }, submit?: boolean)` - Request a fee-bump using either signed XDR or a transaction object
 - `submitFeeBumpTransaction(feeBumpXdr: string)` - Submit a fee-bump transaction to Horizon
 - `buildAndRequestFeeBump(transaction: Transaction, submit?: boolean)` - Build, sign, and request fee-bump
 - `buildSACTransferTx(options)` - Build and prepare a Stellar Asset Contract transfer transaction ready for signing and fee bumping
+
+### `useFeeBump`
+
+```typescript
+const { requestFeeBump, isLoading, error, result } = useFeeBump(client);
+```
+
+- `requestFeeBump(transactionOrXdr, submit?)` accepts either a signed XDR string or an object with `toXDR()`
+- `isLoading` is `true` while the request is in flight
+- `error` contains the last thrown error, if any
+- `result` contains the latest successful fee-bump response
 
 ## Development
 
