@@ -11,6 +11,8 @@ export type ErrorCode =
   | "TOO_MANY_OPERATIONS"
   | "NETWORK_MISMATCH"
   | "QUOTA_EXCEEDED";
+  | "SLIPPAGE_TOO_HIGH";
+  | "SETTLEMENT_VERIFICATION_FAILED";
 
 export class AppError extends Error {
   public readonly statusCode: number;
