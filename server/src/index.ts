@@ -22,8 +22,10 @@ import {
 import { globalErrorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { apiKeyRateLimit } from "./middleware/rateLimit";
 import { AlertService } from "./services/alertService";
+import { PagerDutyNotifier } from "./services/pagerDutyNotifier";
 import { initializeBalanceMonitor } from "./workers/balanceMonitor";
 import { initializeLedgerMonitor } from "./workers/ledgerMonitor";
+import { initializeIncidentMonitor } from "./workers/incidentMonitor";
 import { transactionStore } from "./workers/transactionStore";
 import {
   getLedgerMonitor,
@@ -39,6 +41,7 @@ app.use(express.json());
 
 const config = loadConfig();
 const alertService = new AlertService(config.alerting);
+const pagerDutyNotifier = new PagerDutyNotifier();
 
 // Use Redis-backed store for global IP rate limiting. Falls back to memory store if Redis unavailable.
 const windowSeconds = Math.max(1, Math.ceil(config.rateLimitWindowMs / 1000));
@@ -198,6 +201,7 @@ app.use(globalErrorHandler);
 const PORT = process.env.PORT || 3000;
 
 let ledgerMonitor: ReturnType<typeof initializeLedgerMonitor> | null = null;
+let incidentMonitor: ReturnType<typeof initializeIncidentMonitor> | null = null;
 if (config.horizonUrls.length > 0) {
   try {
     ledgerMonitor = initializeLedgerMonitor(config);
@@ -229,6 +233,20 @@ if (
 } else {
   console.log(
     "Low balance alerting disabled - missing Horizon URL, threshold, or alert transport",
+  );
+}
+
+if (pagerDutyNotifier.isConfigured()) {
+  try {
+    incidentMonitor = initializeIncidentMonitor(config, pagerDutyNotifier);
+    incidentMonitor.start();
+    logger.info("Incident monitor worker started");
+  } catch (error) {
+    logger.error({ ...serializeError(error) }, "Failed to start incident monitor");
+  }
+} else {
+  logger.info("PagerDuty incident alerting disabled - routing key not set");
+}
 
 app.listen(PORT, () => {
   logger.info(
