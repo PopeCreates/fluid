@@ -1,0 +1,104 @@
+export type DashboardSignerStatus =
+  | "Active"
+  | "Low Balance"
+  | "Sequence Error"
+  | "Inactive";
+
+export interface DashboardTransaction {
+  id: string;
+  hash: string;
+  amount: string;
+  asset: string;
+  status: "pending" | "submitted" | "success" | "failed";
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DashboardSigner {
+  id: string;
+  publicKey: string;
+  status: DashboardSignerStatus;
+  balance: string;
+  inFlight: number;
+  totalUses: number;
+  sequenceNumber: string;
+}
+
+export type TransactionStatus = "pending" | "submitted" | "success" | "failed";
+
+export interface TransactionHistoryRow {
+  id: string;
+  timestamp: string;
+  innerHash: string;
+  status: TransactionStatus;
+  costStroops: number;
+  tenant: string;
+}
+
+export interface TenantUsageRow {
+  tenant: string;
+  txCount: number;
+  totalCostStroops: number;
+  successCount: number;
+  failedCount: number;
+}
+
+export interface ApiKey {
+  id: string;
+  key: string;
+  prefix: string;
+  tenantId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SubscriptionTierCode = "free" | "pro" | "enterprise";
+
+export interface SubscriptionTier {
+  id: string;
+  name: "Free" | "Pro" | "Enterprise";
+  code: SubscriptionTierCode;
+  txLimit: number;
+  rateLimit: number;
+  priceMonthly: number;
+}
+
+export interface TenantTierSummary {
+  id: string;
+  name: string;
+  subscriptionTierId: string;
+  subscriptionTier: SubscriptionTier;
+}
+
+export interface SubscriptionTierPageData {
+  tiers: SubscriptionTier[];
+  tenants: TenantTierSummary[];
+  tenant: TenantTierSummary | null;
+  source: "live" | "sample";
+}
+
+export type TransactionHistorySort =
+  | "time_desc"
+  | "time_asc"
+  | "cost_desc"
+  | "cost_asc";
+
+export interface TransactionHistoryQuery {
+  page: number;
+  pageSize: number;
+  search: string;
+  sort: TransactionHistorySort;
+}
+
+export interface TransactionHistoryPageData {
+  rows: TransactionHistoryRow[];
+  page: number;
+  pageSize: number;
+  totalRows: number;
+  totalPages: number;
+  sort: TransactionHistorySort;
+  search: string;
+  source: "live" | "sample";
+}

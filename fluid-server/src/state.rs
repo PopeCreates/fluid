@@ -20,6 +20,7 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub global_limiter: Arc<RateLimiter>,
     pub horizon: Arc<HorizonCluster>,
+    pub metrics: Arc<AppMetrics>,
     pub quota_ledger: Arc<Mutex<Vec<SponsoredTransactionRecord>>>,
     pub signer_pool: Arc<SignerPool>,
     pub transaction_store: Arc<Mutex<HashMap<String, TransactionRecord>>>,
@@ -61,12 +62,17 @@ pub const API_KEYS: [ApiKeyConfig; 2] = [
 #[derive(Clone)]
 pub struct SignerAccount {
     pub active: bool,
+    pub balance_stroops: Option<u64>,
+    pub consecutive_failures: u32,
     pub public_key: String,
     pub public_key_bytes: [u8; 32],
     pub secret: String,
     pub total_uses: u64,
     pub in_flight: u32,
 }
+
+pub const FAILURE_THRESHOLD: u32 = 3;
+pub const REVALIDATION_INTERVAL_SECS: u64 = 30;
 
 #[derive(Clone)]
 pub struct SignerPool {
@@ -75,13 +81,14 @@ pub struct SignerPool {
 
 pub struct SignerLease {
     pub account: SignerAccount,
-    index: usize,
+    pub index: usize,
     pool: Arc<Mutex<Vec<SignerAccount>>>,
 }
 
 #[derive(Clone, Serialize)]
 pub struct HealthFeePayer {
     pub balance: Option<String>,
+    pub consecutive_failures: u32,
     pub in_flight: u32,
     #[serde(rename = "publicKey")]
     pub public_key: String,
@@ -138,6 +145,12 @@ impl AppState {
                 &config.horizon_urls,
                 config.horizon_selection_strategy,
             )),
+            metrics: Arc::new(AppMetrics::new(
+                std::env::var("FLUID_AVAILABLE_ACCOUNT_BALANCE")
+                    .ok()
+                    .and_then(|value| value.parse::<f64>().ok())
+                    .unwrap_or(0.0),
+            )),
             quota_ledger: Arc::new(Mutex::new(Vec::new())),
             signer_pool: Arc::new(SignerPool::new(secrets)?),
             transaction_store: Arc::new(Mutex::new(HashMap::new())),
@@ -160,6 +173,8 @@ impl SignerPool {
             let (public_key_bytes, public_key) = decode_secret(secret)?;
             accounts.push(SignerAccount {
                 active: true,
+                balance_stroops: None,
+                consecutive_failures: 0,
                 public_key,
                 public_key_bytes,
                 secret: secret.clone(),
@@ -175,11 +190,17 @@ impl SignerPool {
 
     pub async fn acquire(&self) -> Result<SignerLease, AppError> {
         let mut guard = self.inner.lock().await;
+        // Prioritize accounts with highest balance; fall back to fewest in-flight
         let (index, account) = guard
             .iter_mut()
             .enumerate()
             .filter(|(_, account)| account.active)
-            .min_by_key(|(_, account)| (account.in_flight, account.total_uses))
+            .max_by_key(|(_, account)| {
+                (
+                    account.balance_stroops.unwrap_or(0),
+                    u32::MAX - account.in_flight,
+                )
+            })
             .ok_or_else(|| {
                 AppError::new(
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -198,12 +219,112 @@ impl SignerPool {
         })
     }
 
+    /// Record a successful transaction for the account at `index`.
+    pub async fn report_success(&self, index: usize) {
+        let mut guard = self.inner.lock().await;
+        if let Some(account) = guard.get_mut(index) {
+            account.consecutive_failures = 0;
+        }
+    }
+
+    /// Record a failure for the account at `index`.
+    /// After FAILURE_THRESHOLD consecutive failures the account is marked inactive.
+    pub async fn report_failure(&self, index: usize, reason: &str) {
+        let mut guard = self.inner.lock().await;
+        if let Some(account) = guard.get_mut(index) {
+            account.consecutive_failures += 1;
+            if account.consecutive_failures >= FAILURE_THRESHOLD && account.active {
+                account.active = false;
+                tracing::warn!(
+                    "[LoadBalancer] Account {} deactivated after {} consecutive failures. Last reason: {}",
+                    account.public_key,
+                    account.consecutive_failures,
+                    reason
+                );
+            }
+        }
+    }
+
+    /// Periodically re-enable inactive accounts and refresh balances via Horizon.
+    /// Accounts with higher balances are naturally preferred by `acquire`.
+    pub async fn revalidate(&self, horizon_url: &str, client: &reqwest::Client) {
+        let snapshots: Vec<(usize, String, bool)> = {
+            let guard = self.inner.lock().await;
+            guard
+                .iter()
+                .enumerate()
+                .map(|(i, a)| (i, a.public_key.clone(), a.active))
+                .collect()
+        };
+
+        for (index, public_key, was_active) in snapshots {
+            let url = format!(
+                "{}/accounts/{}",
+                horizon_url.trim_end_matches('/'),
+                public_key
+            );
+            match client.get(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    #[derive(serde::Deserialize)]
+                    struct AccountResponse {
+                        balances: Vec<Balance>,
+                    }
+                    #[derive(serde::Deserialize)]
+                    struct Balance {
+                        asset_type: String,
+                        balance: String,
+                    }
+
+                    if let Ok(body) = response.json::<AccountResponse>().await {
+                        let xlm_stroops = body
+                            .balances
+                            .iter()
+                            .find(|b| b.asset_type == "native")
+                            .and_then(|b| b.balance.parse::<f64>().ok())
+                            .map(|xlm| (xlm * 10_000_000.0) as u64);
+
+                        let mut guard = self.inner.lock().await;
+                        if let Some(account) = guard.get_mut(index) {
+                            account.balance_stroops = xlm_stroops;
+                            if !was_active {
+                                account.active = true;
+                                account.consecutive_failures = 0;
+                                tracing::info!(
+                                    "[LoadBalancer] Account {} re-enabled. Balance: {} stroops",
+                                    account.public_key,
+                                    xlm_stroops.unwrap_or(0)
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(response) => {
+                    tracing::warn!(
+                        "[LoadBalancer] Revalidation fetch for {} returned HTTP {}",
+                        public_key,
+                        response.status()
+                    );
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "[LoadBalancer] Revalidation fetch for {} failed: {}",
+                        public_key,
+                        err
+                    );
+                }
+            }
+        }
+    }
+
     pub async fn snapshot(&self) -> Vec<HealthFeePayer> {
         let guard = self.inner.lock().await;
         guard
             .iter()
             .map(|account| HealthFeePayer {
-                balance: None,
+                balance: account
+                    .balance_stroops
+                    .map(|s| format!("{:.7}", s as f64 / 10_000_000.0)),
+                consecutive_failures: account.consecutive_failures,
                 in_flight: account.in_flight,
                 public_key: account.public_key.clone(),
                 sequence_number: None,
@@ -235,10 +356,12 @@ impl RateLimiter {
     pub async fn check(&self, key: &str) -> Result<RateLimitResult, AppError> {
         let mut guard = self.entries.lock().await;
         let now_ms = now_ms();
-        let entry = guard.entry(key.to_string()).or_insert_with(|| RateLimitEntry {
-            count: 0,
-            reset_time_ms: now_ms + u128::from(self.window_ms),
-        });
+        let entry = guard
+            .entry(key.to_string())
+            .or_insert_with(|| RateLimitEntry {
+                count: 0,
+                reset_time_ms: now_ms + u128::from(self.window_ms),
+            });
 
         if now_ms >= entry.reset_time_ms {
             entry.count = 0;
@@ -285,7 +408,7 @@ fn decode_secret(secret: &str) -> Result<([u8; 32], String), AppError> {
     let public_key_bytes = signing_key.verifying_key().to_bytes();
     let public_key = Strkey::PublicKeyEd25519(ed25519::PublicKey(public_key_bytes)).to_string();
 
-    Ok((public_key_bytes, public_key))
+    Ok((public_key_bytes, public_key.to_string()))
 }
 
 pub fn now_ms() -> u128 {
