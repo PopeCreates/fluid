@@ -1,10 +1,16 @@
 mod xdr;
-mod sequence_manager;
 
-use axum::{routing::get, Json, Router};
+mod ai_query;
+
+use axum::{
+    routing::{get, post},
+    Json, Router,
+};
 use serde::Serialize;
 use std::net::SocketAddr;
 use tracing::info;
+
+use ai_query::{handle_ai_query, QueryRequest, QueryFilters};
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -13,6 +19,13 @@ struct HealthResponse {
 
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse { status: "ok" })
+}
+
+// AI QUERY HANDLER (AXUM STYLE)
+async fn ai_query_handler(Json(req): Json<QueryRequest>) -> Json<QueryFilters> {
+    let filters = handle_ai_query(req.query);
+
+    Json(filters)
 }
 
 #[tokio::main]
@@ -24,7 +37,10 @@ async fn main() {
         )
         .init();
 
-    let app = Router::new().route("/health", get(health));
+    // ADD ROUTE HERE
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/ai/query", post(ai_query_handler));
 
     let port: u16 = std::env::var("PORT")
         .ok()
