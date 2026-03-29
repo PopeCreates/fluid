@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/Stellar-Fluid/fluid/compare/v1.11.0...v1.12.0) (2026-03-29)
+
+
+### Features
+
+* embedded ai support chatbot for dashboard operators ([d2d10a4](https://github.com/Stellar-Fluid/fluid/commit/d2d10a4d50a4c34453aea7d3d6eebf19498e5f5a))
+
 # [1.11.0](https://github.com/Stellar-Fluid/fluid/compare/v1.10.0...v1.11.0) (2026-03-29)
 
 
