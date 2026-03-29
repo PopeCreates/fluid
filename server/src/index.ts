@@ -116,6 +116,8 @@ import { listTransactionsHandler } from "./handlers/adminTransactions";
 import { getSpendForecastHandler } from "./handlers/adminAnalytics";
 import { getFeeMultiplierHandler } from "./handlers/adminFeeMultiplier";
 import { estimateFeeHandler } from "./handlers/estimate";
+import { listAuditLogsHandler } from "./handlers/adminAuditLogs";
+import { startAuditSummaryWorker } from "./services/auditLog";
 
 dotenv.config();
 const logger = createLogger({ component: "server" });
@@ -416,6 +418,11 @@ app.get("/admin/digest/unsubscribe", digestUnsubscribeHandler);
 app.post("/admin/digest/unsubscribe", digestUnsubscribeHandler);
 app.post("/admin/digest/send-now", sendDigestNowHandler);
 
+// Audit logs
+app.get("/admin/audit-logs", (req: Request, res: Response) => {
+  void listAuditLogsHandler(req, res);
+});
+
 // Chain registry — supported network management (Phase 11)
 app.get("/admin/chains", (req: Request, res: Response) => {
   void listChainsHandler(req, res);
@@ -563,6 +570,14 @@ try {
   }
 } catch (error) {
   logger.error({ ...serializeError(error) }, "Failed to start daily digest worker");
+}
+
+// Audit log AI summary worker
+try {
+  startAuditSummaryWorker();
+  logger.info("Audit summary worker started");
+} catch (error) {
+  logger.error({ ...serializeError(error) }, "Failed to start audit summary worker");
 }
 
 // Chain registry hot-reload (reads enabled chains from DB on interval)
