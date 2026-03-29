@@ -214,3 +214,9 @@ model AdminNotification {
   @@index([read])
   @@index([createdAt])
 }
+
+/// Tracks email addresses that have opted out of the daily digest.
+model DigestUnsubscribe {
+  email     String   @id
+  createdAt DateTime @default(now())
+}

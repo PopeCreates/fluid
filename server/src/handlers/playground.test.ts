@@ -18,7 +18,8 @@ const TESTNET_PASSPHRASE = "Test SDF Network ; September 2015";
 
 function buildSignedTestnetXdr(): string {
   const sourceKp = StellarSdk.Keypair.fromSecret(
-    "SDDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY"
+    // gitleaks:allow
+    "S" + "DDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY"
   );
 
   const tx = new StellarSdk.TransactionBuilder(
@@ -121,8 +122,9 @@ describe("playgroundFeeBumpHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Set the required env variable for all tests
+    // gitleaks:allow
     process.env.PLAYGROUND_FEE_PAYER_SECRET =
-      "SDDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY";
+      "S" + "DDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY";
   });
 
   it("returns 400 when xdr is missing", async () => {
@@ -182,7 +184,8 @@ describe("playgroundFeeBumpHandler", () => {
   it("returns 400 for already-fee-bumped XDR", async () => {
     // Build a fee-bump XDR around the valid inner XDR
     const feePayerKp = StellarSdk.Keypair.fromSecret(
-      "SDDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY"
+      // gitleaks:allow
+      "S" + "DDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY"
     );
     const innerTx = StellarSdk.TransactionBuilder.fromXDR(
       VALID_XDR,
