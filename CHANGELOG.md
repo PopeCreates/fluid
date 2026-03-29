@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/Stellar-Fluid/fluid/compare/v1.10.0...v1.11.0) (2026-03-29)
+
+
+### Features
+
+* ai-powered suspicious account auto-blocklist ([b774af4](https://github.com/Stellar-Fluid/fluid/commit/b774af4dd62f1a595dc3fa5979730c1e3d81acc4))
+
 # [1.10.0](https://github.com/Stellar-Fluid/fluid/compare/v1.9.0...v1.10.0) (2026-03-29)
 
 
