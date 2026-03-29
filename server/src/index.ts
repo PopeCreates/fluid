@@ -78,58 +78,29 @@ import {
   getLedgerMonitor,
   initializeLedgerMonitor,
 } from "./workers/ledgerMonitor";
-import { initializeIncidentMonitor } from "./workers/incidentMonitor";
-import { initializeTreasuryRefill } from "./workers/treasuryRefill";
-import { initializeDigestWorker } from "./workers/digestWorker";
-import { transactionStore } from "./workers/transactionStore";
-import { healthHandler } from "./handlers/health";
-import {
-  listNotificationsHandler,
-  createNotificationHandler,
-  markReadHandler,
-  markAllReadHandler,
-  notificationSseHandler,
-} from "./handlers/adminNotifications";
 import {
   digestUnsubscribeHandler,
   sendDigestNowHandler,
 } from "./handlers/digest";
-  deleteDeviceTokenHandler,
-  listDeviceTokensHandler,
-  registerDeviceTokenHandler,
-} from "./handlers/adminDeviceTokens";
-import {
-  SlackNotifier,
-  loadSlackNotifierOptionsFromEnv,
-} from "./services/slackNotifier";
-import { PagerDutyNotifier } from "./services/pagerDutyNotifier";
-import { initializeFcmNotifier } from "./services/fcmNotifier";
 import { initializeFeeManager } from "./services/feeManager";
 import { listTransactionsHandler } from "./handlers/adminTransactions";
 import { getSpendForecastHandler } from "./handlers/adminAnalytics";
 import { getFeeMultiplierHandler } from "./handlers/adminFeeMultiplier";
 import { estimateFeeHandler } from "./handlers/estimate";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./swagger";
+import { initializeTreasuryRefill } from "./workers/treasuryRefill";
+import { initializeDigestWorker } from "./workers/digestWorker";
+import { transactionStore } from "./workers/transactionStore";
 
 dotenv.config();
-const logger = createLogger({ component: "server" });
-
-const app = express();
-app.use(express.json());
-
-// Swagger UI — available at /docs
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-// Raw OpenAPI JSON spec
-app.get("/docs.json", (_req: Request, res: Response) => {
-  res.setHeader("Content-Type", "application/json");
-  res.send(swaggerSpec);
-});
-
 const logger = createLogger({ component: "server" });
 const config = loadConfig();
 const feeManager = initializeFeeManager(config);
 const slackNotifier = new SlackNotifier(loadSlackNotifierOptionsFromEnv());
 const pagerDutyNotifier = new PagerDutyNotifier();
 const fcmNotifier = initializeFcmNotifier();
+
 if (fcmNotifier.isConfigured()) {
   logger.info("FCM push notifications enabled");
 } else {
@@ -137,6 +108,7 @@ if (fcmNotifier.isConfigured()) {
     "FCM push notifications disabled - FCM_PROJECT_ID/FCM_CLIENT_EMAIL/FCM_PRIVATE_KEY not set",
   );
 }
+
 const alertService = new AlertService(config.alerting, slackNotifier, {
   fcmNotifier,
 });
