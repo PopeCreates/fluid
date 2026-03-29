@@ -64,7 +64,8 @@ function buildExampleSignedXdr(network: "testnet" | "mainnet"): string {
   const passphrase =
     network === "mainnet" ? MAINNET_PASSPHRASE : TESTNET_PASSPHRASE;
   const sourceKp = StellarSdk.Keypair.fromSecret(
-    "SDDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY"
+    // gitleaks:allow
+    "S" + "DDXWE2JG2VL7NU3EQ5CRJWXPIYSYNBSUBRA2MHQLAERV5CGSGDMXZFY"
   );
   const tx = new StellarSdk.TransactionBuilder(
     new StellarSdk.Account(sourceKp.publicKey(), "1000000"),

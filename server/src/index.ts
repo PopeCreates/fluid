@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import dotenv from "dotenv";
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
@@ -77,11 +78,55 @@ import {
   getLedgerMonitor,
   initializeLedgerMonitor,
 } from "./workers/ledgerMonitor";
-import { transactionStore } from "./workers/transactionStore";
+import { initializeIncidentMonitor } from "./workers/incidentMonitor";
 import { initializeTreasuryRefill } from "./workers/treasuryRefill";
+import { initializeDigestWorker } from "./workers/digestWorker";
+import { transactionStore } from "./workers/transactionStore";
+import { healthHandler } from "./handlers/health";
+import {
+  listNotificationsHandler,
+  createNotificationHandler,
+  markReadHandler,
+  markAllReadHandler,
+  notificationSseHandler,
+} from "./handlers/adminNotifications";
+import {
+  digestUnsubscribeHandler,
+  sendDigestNowHandler,
+} from "./handlers/digest";
+  deleteDeviceTokenHandler,
+  listDeviceTokensHandler,
+  registerDeviceTokenHandler,
+} from "./handlers/adminDeviceTokens";
+import {
+  SlackNotifier,
+  loadSlackNotifierOptionsFromEnv,
+} from "./services/slackNotifier";
+import { PagerDutyNotifier } from "./services/pagerDutyNotifier";
+import { initializeFcmNotifier } from "./services/fcmNotifier";
+import { initializeFeeManager } from "./services/feeManager";
+import { listTransactionsHandler } from "./handlers/adminTransactions";
+import { getSpendForecastHandler } from "./handlers/adminAnalytics";
+import { getFeeMultiplierHandler } from "./handlers/adminFeeMultiplier";
+import { estimateFeeHandler } from "./handlers/estimate";
+
+dotenv.config();
+const logger = createLogger({ component: "server" });
+
+const app = express();
+app.use(express.json());
+
+// Swagger UI — available at /docs
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Raw OpenAPI JSON spec
+app.get("/docs.json", (_req: Request, res: Response) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(swaggerSpec);
+});
 
 const logger = createLogger({ component: "server" });
 const config = loadConfig();
+const feeManager = initializeFeeManager(config);
 const slackNotifier = new SlackNotifier(loadSlackNotifierOptionsFromEnv());
 const pagerDutyNotifier = new PagerDutyNotifier();
 const fcmNotifier = initializeFcmNotifier();
@@ -261,7 +306,7 @@ app.post(
   tenantTierTxLimit,
   limiter,
   (req: Request, res: Response, next: NextFunction) => {
-    void feeBumpHandler(req, res, config, next);
+    void feeBumpHandler(req, res, next, config);
   },
 );
 
@@ -325,6 +370,9 @@ app.get("/admin/signers", listSignersHandler(config));
 app.post("/admin/signers", addSignerHandler(config));
 app.delete("/admin/signers/:publicKey", removeSignerHandler(config));
 app.get("/admin/prices", getPriceHandler);
+app.get("/admin/transactions", listTransactionsHandler);
+app.get("/admin/analytics/spend-forecast", getSpendForecastHandler(config));
+app.get("/admin/fee-multiplier", getFeeMultiplierHandler);
 app.get("/admin/device-tokens", listDeviceTokensHandler);
 app.post("/admin/device-tokens", registerDeviceTokenHandler);
 app.delete("/admin/device-tokens/:id", deleteDeviceTokenHandler);
@@ -349,12 +397,17 @@ app.patch("/admin/notifications/:id/read", (req: Request, res: Response) => {
   void markReadHandler(req, res);
 });
 
-app.post(
-  "/stripe/webhook",
+app.post("/stripe/webhook",
   express.raw({ type: "application/json" }),
   stripeWebhookHandler,
 );
 app.post("/create-checkout-session", createCheckoutSessionHandler);
+app.post("/estimate", limiter, estimateFeeHandler(config));
+
+// Daily digest
+app.get("/admin/digest/unsubscribe", digestUnsubscribeHandler);
+app.post("/admin/digest/unsubscribe", digestUnsubscribeHandler);
+app.post("/admin/digest/send-now", sendDigestNowHandler);
 
 app.use(notFoundHandler);
 app.use(createGlobalErrorHandler(slackNotifier));
@@ -364,6 +417,7 @@ const PORT = process.env.PORT || 3000;
 let ledgerMonitor: ReturnType<typeof initializeLedgerMonitor> | null = null;
 let balanceMonitor: ReturnType<typeof initializeBalanceMonitor> | null = null;
 let incidentMonitor: ReturnType<typeof initializeIncidentMonitor> | null = null;
+let digestWorker: ReturnType<typeof initializeDigestWorker> | null = null;
 let shuttingDown = false;
 let server: ReturnType<typeof app.listen> | null = null;
 
@@ -382,6 +436,8 @@ async function shutdown(signal: string): Promise<void> {
   ledgerMonitor?.stop();
   balanceMonitor?.stop();
   incidentMonitor?.stop();
+  digestWorker?.stop();
+  feeManager.stop();
 
   if (server) {
     server.close(() => process.exit(0));
@@ -474,6 +530,17 @@ try {
     { ...serializeError(error) },
     "Failed to start status monitor worker",
   );
+}
+
+// Daily email digest worker
+try {
+  digestWorker = initializeDigestWorker();
+  if (digestWorker) {
+    digestWorker.start();
+    logger.info("Daily digest worker started");
+  }
+} catch (error) {
+  logger.error({ ...serializeError(error) }, "Failed to start daily digest worker");
 }
 
 server = app.listen(PORT, () => {

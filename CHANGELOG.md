@@ -1,3 +1,29 @@
+# [1.6.0](https://github.com/Stellar-Fluid/fluid/compare/v1.5.0...v1.6.0) (2026-03-29)
+
+
+### Bug Fixes
+
+* **ci:** add fluid-server to workspace and fix gitleaks ([9db8e76](https://github.com/Stellar-Fluid/fluid/commit/9db8e760eccce59a11fad26d2b1b05e92f959751))
+
+
+### Features
+
+* daily email digest for operator activity summary ([1ce4e2e](https://github.com/Stellar-Fluid/fluid/commit/1ce4e2e7223ac72696570abfd3301ee55788ac19))
+
+# [1.5.0](https://github.com/Stellar-Fluid/fluid/compare/v1.4.0...v1.5.0) (2026-03-29)
+
+
+### Features
+
+* Add webhook delivery log UI in dashboard ([6d05b78](https://github.com/Stellar-Fluid/fluid/commit/6d05b78aa40f1422eecac8b4bd88708edca5b309))
+
+# [1.4.0](https://github.com/Stellar-Fluid/fluid/compare/v1.3.0...v1.4.0) (2026-03-29)
+
+
+### Features
+
+* add admin analytics and fee estimation flows ([3e1937e](https://github.com/Stellar-Fluid/fluid/commit/3e1937e24987024f29dc2b921b654e2ca5de840f))
+
 # [1.3.0](https://github.com/Stellar-Fluid/fluid/compare/v1.2.0...v1.3.0) (2026-03-28)
 
 
