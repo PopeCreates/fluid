@@ -14,5 +14,10 @@
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "semantic-release": "^24.2.3"
+  },
+  "dependencies": {
+    "lucide-react": "^1.7.0",
+    "recharts": "^3.8.1",
+    "server-only": "^0.0.1"
   }
 }
