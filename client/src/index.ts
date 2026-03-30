@@ -577,6 +577,20 @@ export type { TelemetryConfig, TelemetryData } from "./telemetry";
 
 export { FluidQueue } from "./queue";
 export type { QueuedTransaction, FluidQueueCallbacks } from "./queue";
+
+// React components
+export {
+  SponsorTransactionAction,
+  SponsorButton,
+} from "./components/SponsorButton";
+export type {
+  SponsorTransactionActionProps,
+  SponsorButtonState,
+} from "./components/SponsorButton";
+
+// React hooks
+export { useFeeBump } from "./hooks/useFeeBump";
+export type { UseFeeBumpResult } from "./hooks/useFeeBump";
 export {
   buildFeeBumpTransaction,
   createHorizonServer,
